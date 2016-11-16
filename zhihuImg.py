@@ -43,9 +43,9 @@ def loginzh():
         'User-agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36'}
     postData = parse.urlencode([
         ('_xsrf', xsrf),
-        ('phone_num', '18750929449'),
+        ('phone_num', '18125459449'),
         ('remember_me', 'true'),
-        ('password', 'ssrs_95zz')
+        ('password', 'avcdzz')
     ])
     request = urllib.request.Request(posturl, postData.encode('utf-8'), headers)
     text = urllib.request.urlopen(request).read()
