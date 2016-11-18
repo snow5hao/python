@@ -4,6 +4,7 @@ import http.cookiejar
 import re
 import threading
 import time
+import pymysql
 from datetime import datetime
 from queue import Queue
 from bs4 import BeautifulSoup
@@ -22,10 +23,11 @@ foundInfo.put("当前时间:"+now.strftime('%Y-%m-%d %H:%M:%S'))
 foundAboutUrl="http://fund.eastmoney.com/f10/jbgk_233009.html"
 foundDetailUrl="http://fund.eastmoney.com/233009.html?spm=search"
 allFoundUrl="http://fund.eastmoney.com/daogou/#dt0;ft;rs;sd;ed;pr;cp;rt;tp;rk;se;nx;scz;stdesc;pi1;pn20;zfdiy;shlist"
+foundUrl="http://fund.eastmoney.com/allfund.html"
 
 #返回url的soup
 # 参数：包含基金信息url,基金代码code（默认是查询摩尔因子）
-def getSoup(url,code="233009"):
+def getSoup(url,charset="utf-8",code="233009"):
     url = re.sub(r'[0-9]{6}', code, url)
     cj = http.cookiejar.LWPCookieJar()
     cookie_support = request.HTTPCookieProcessor(cj)
@@ -36,7 +38,7 @@ def getSoup(url,code="233009"):
                    'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36')
     req.add_header('Host', 'fund.eastmoney.com')
     req.add_header('Referer', 'http://fund.eastmoney.com/trade/hh.html')
-    content = request.urlopen(req).read().decode('utf-8')
+    content = request.urlopen(req).read().decode(charset,'ignore')
     soup = BeautifulSoup(content, "html.parser")
     return soup
 
@@ -115,23 +117,40 @@ def FoundCodeUrl():
         foundCodeUrlQueue.put(foundCodeUrl)
 
 #获取所有的基金代码，保存在saveFoundCode中
-xy=1
+#暂时这个函数不能用
 def getFoundCode(threadName):
-    global xy
-
     #用来保存所有的基金代码
     while not foundCodeUrlQueue.empty():
-        if xy == 3:
-            exit(0)
         # 获取每页含有的基金代码
         url=foundCodeUrlQueue.get()
         soup=getSoup(url)
-        xy += 1
         fondList = soup.find_all(id="fund_list")
         x = fondList[0].find_all(text=re.compile("[0-9]{6}"))
         for i in x :
             saveFoundCode.put(i)
 
+def getAllCode():
+    soup=getSoup(foundUrl,"gb2312")
+    #allf=soup.find_all(text=re.compile("[0-9]{6,}"))
+    allf=soup.find_all("ul",class_="num_right")
+    db = pymysql.connect("172.168.1.161","jack","root1234","found" )
+    cursor=db.cursor()
+    for i in allf:
+        x=i.find_all(text=re.compile("[0-9]{6,}"))
+        #获取基金代码
+        for allcode in x:
+            codeNum=re.search("[0-9]{6,}",allcode)
+            codeName=re.sub(r'\（[0-9]{6,}\）',"",allcode)
+            sql=str("insert into foundabout values(null,'"+codeNum.group(0)+"','"+codeName+"');").encode('utf-8')
+            cursor.execute(sql)
+            #saveFoundCode.put(codeNum.group(0))
+            #print(codeName)
+        db.commit()
+        #获取基金名字
+getAllCode()
+# while not saveFoundCode.empty():
+#     print(saveFoundCode.get())
+exit(0)
 code=0
 #检查输入的基金代码是否正确
 #参数：n ，可以输入的次数
