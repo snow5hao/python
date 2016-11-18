@@ -133,15 +133,15 @@ def getAllCode():
     soup=getSoup(foundUrl,"gb2312")
     #allf=soup.find_all(text=re.compile("[0-9]{6,}"))
     allf=soup.find_all("ul",class_="num_right")
-    db = pymysql.connect("172.168.1.161","jack","root1234","found" )
+    db = pymysql.connect("localhost","root","root","found",charset="utf8" )
     cursor=db.cursor()
     for i in allf:
         x=i.find_all(text=re.compile("[0-9]{6,}"))
-        #获取基金代码
+        #获取基金代码和基金名字，并且保存在数据库中
         for allcode in x:
             codeNum=re.search("[0-9]{6,}",allcode)
             codeName=re.sub(r'\（[0-9]{6,}\）',"",allcode)
-            sql=str("insert into foundabout values(null,'"+codeNum.group(0)+"','"+codeName+"');").encode('utf-8')
+            sql=str("insert into foundabout values(null,'"+codeNum.group(0)+"','"+codeName+"');")
             cursor.execute(sql)
             #saveFoundCode.put(codeNum.group(0))
             #print(codeName)
