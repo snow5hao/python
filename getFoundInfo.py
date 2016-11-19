@@ -46,34 +46,29 @@ def getSoup(url,charset="utf-8",code="233009"):
 #获取基金的涨幅等信息,把结果保存在foundInfo列队中
 #参数：code 基金代码,默认是233009
 def getFoundInfo(code="233009"):
-    soup = getSoup(foundDetailUrl,code)
+    soup = getSoup(foundDetailUrl,'utf-8',code)
     #查找基金名字
     jname=soup.find_all("div",class_="fundDetail-tit")
     for i in jname:
         foundInfo.put("您要查找的基金是："+i.text)
-
     #查找出估算净值和单位净值
     jinzhi = soup.find_all("dd", class_="dataNums")
     gs=jinzhi[0].find("dl",class_="floatleft")
     foundInfo.put("估算净值:"+gs.span.string)
     foundInfo.put("单位净值:"+jinzhi[1].span.string)
-
     #估算涨幅
     zhangfu=soup.find_all(id="gz_gszzl")
     zhangfu[0].string
     #插入估算涨幅
     foundInfo.put("实时估算涨幅:"+zhangfu[0].string)
-
     #插入历史涨幅
     foundInfo.put("历史涨幅：")
-
     #涨幅时间
     a = []
     jdate=soup.find_all("div",class_="poptableWrap singleStyleHeight01")
     tdlist=jdate[0].table.find_all("td",class_="alignLeft")
     for i in tdlist:
         a.append(i.string)
-
     #历史涨幅
     flag=0
     history=soup.find_all("td",class_="RelatedInfo alignRight10 bold")
@@ -81,7 +76,6 @@ def getFoundInfo(code="233009"):
         a[flag]=a[flag]+" : "+i.span.string
         foundInfo.put(a[flag])
         flag += 1
-
     #近5日涨幅
     fiveDay=0
     flag=0
@@ -91,7 +85,6 @@ def getFoundInfo(code="233009"):
             fiveDay+=x
             flag+=1
     foundInfo.put("5日跌幅："+str(fiveDay)+"%")
-
     #历史长时间的涨幅
     longtime=soup.find(id="increaseAmount_stage")
     x=longtime.find_all(text=re.compile("%"))
@@ -102,8 +95,9 @@ def getFoundInfo(code="233009"):
         flag+=1
         foundInfo.put(zfstr)
 
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #获取含有基金代码列表的所有url地址
-
+#暂时这个函数不用
 def FoundCodeUrl():
     soup = getSoup(allFoundUrl)
     # 获取总的页数
@@ -128,7 +122,9 @@ def getFoundCode(threadName):
         x = fondList[0].find_all(text=re.compile("[0-9]{6}"))
         for i in x :
             saveFoundCode.put(i)
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+#获取所有的基金代码和基金名字，保存在数据库中和saveFoundCode列队中
 def getAllCode():
     soup=getSoup(foundUrl,"gb2312")
     #allf=soup.find_all(text=re.compile("[0-9]{6,}"))
@@ -137,20 +133,15 @@ def getAllCode():
     cursor=db.cursor()
     for i in allf:
         x=i.find_all(text=re.compile("[0-9]{6,}"))
-        #获取基金代码和基金名字，并且保存在数据库中
         for allcode in x:
             codeNum=re.search("[0-9]{6,}",allcode)
             codeName=re.sub(r'\（[0-9]{6,}\）',"",allcode)
             sql=str("insert into foundabout values(null,'"+codeNum.group(0)+"','"+codeName+"');")
             cursor.execute(sql)
-            #saveFoundCode.put(codeNum.group(0))
-            #print(codeName)
+            saveFoundCode.put(codeNum.group(0))
         db.commit()
         #获取基金名字
-getAllCode()
-# while not saveFoundCode.empty():
-#     print(saveFoundCode.get())
-exit(0)
+
 code=0
 #检查输入的基金代码是否正确
 #参数：n ，可以输入的次数
@@ -167,6 +158,9 @@ def checkInputCode(n):
             exit(1)
         else:
             checkInputCode(n)
+    elif code not in saveFoundCode:
+        print("你找的是火星上的基金吗？反正我是没找到这只鸡")
+        exit(1)
     return code
 
 #创建多线程
@@ -185,7 +179,7 @@ code=checkInputCode(3)
 getFoundInfo(code)
 while not foundInfo.empty():
     print(foundInfo.get())
-FoundCodeUrl()
+
 # while not foundCodeUrlQueue.empty():
 #     print(foundCodeUrlQueue.get())
 # exit(0)
@@ -193,14 +187,12 @@ threads=[]
 threadList=["Thread-1","Thread-2","Thread-3","Thread-4"]
 for iname in threadList:
     thread=myThread(iname)
-    thread.start()
+    #thread.start()
     threads.append(thread)
 
 for i in threads:
     i.join()
 print(time.ctime())
-while not saveFoundCode.empty():
-    print(saveFoundCode.get())
 print("Exiting main threading")
 
 
