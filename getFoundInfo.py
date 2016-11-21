@@ -5,6 +5,7 @@ import re
 import threading
 import time
 import pymysql
+import hashlib
 from datetime import datetime
 from queue import Queue
 from bs4 import BeautifulSoup
@@ -13,7 +14,7 @@ now=datetime.now()
 now.strftime('%Y-%m-%d %H:%M:%S')
 foundInfo=Queue(10000)            #保存基金的总信息
 foundCodeUrlQueue = Queue(500)  #保存含有基金代码的url地址列表
-saveFoundCode = Queue(100000)   #保存所有的基金代码
+saveFoundCode = []   #保存所有的基金代码
 
 jsq=0               #计数器
 #插入时间
@@ -24,6 +25,7 @@ foundAboutUrl="http://fund.eastmoney.com/f10/jbgk_233009.html"
 foundDetailUrl="http://fund.eastmoney.com/233009.html?spm=search"
 allFoundUrl="http://fund.eastmoney.com/daogou/#dt0;ft;rs;sd;ed;pr;cp;rt;tp;rk;se;nx;scz;stdesc;pi1;pn20;zfdiy;shlist"
 foundUrl="http://fund.eastmoney.com/allfund.html"
+hisJinZhiUrl="http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code=233009&page=6&per=20&sdate=&edate=&rt=0.7782273583645574"
 
 #返回url的soup
 # 参数：包含基金信息url,基金代码code（默认是查询摩尔因子）
@@ -88,7 +90,7 @@ def getFoundInfo(code="233009"):
     #历史长时间的涨幅
     longtime=soup.find(id="increaseAmount_stage")
     x=longtime.find_all(text=re.compile("%"))
-    s=set(["一周","一月","近3月","近6月","今年来","近1年","近2年","近3年"])
+    s=["近一周","近一月","近3月","近6月","今年来","近1年","近2年","近3年"]
     flag=0
     for i in s:
         zfstr=i+" : "+x[flag]
@@ -129,7 +131,7 @@ def getAllCode():
     soup=getSoup(foundUrl,"gb2312")
     #allf=soup.find_all(text=re.compile("[0-9]{6,}"))
     allf=soup.find_all("ul",class_="num_right")
-    db = pymysql.connect("localhost","root","root","found",charset="utf8" )
+    db = pymysql.connect("172.168.1.161","jack","root1234","found",charset="utf8" )
     cursor=db.cursor()
     for i in allf:
         x=i.find_all(text=re.compile("[0-9]{6,}"))
@@ -138,10 +140,39 @@ def getAllCode():
             codeName=re.sub(r'\（[0-9]{6,}\）',"",allcode)
             sql=str("insert into foundabout values(null,'"+codeNum.group(0)+"','"+codeName+"');")
             cursor.execute(sql)
-            saveFoundCode.put(codeNum.group(0))
+            saveFoundCode.append(codeNum.group(0))
         db.commit()
         #获取基金名字
 
+#获取基金历史净值
+def getJinzhi(code,page):
+    url="http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code="+code+"&page="+page+"&per=20&sdate=&edate=&rt=0.7782273583645574"
+    cj = http.cookiejar.LWPCookieJar()
+    cookie_support = request.HTTPCookieProcessor(cj)
+    opener = request.build_opener(cookie_support, request.HTTPHandler)
+    request.install_opener(opener)
+    req = request.Request(url)
+    req.add_header('User-agent',
+                   'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36')
+    req.add_header('Host', 'fund.eastmoney.com')
+    req.add_header('Referer', 'http://fund.eastmoney.com/f10/jjjz_080015.html')
+    content = request.urlopen(req).read().decode('utf-8', 'ignore')
+    soup = BeautifulSoup(content, "html.parser")
+    db = pymysql.connect("172.168.1.161", "jack", "root1234", "found", charset="utf8")
+    cursor = db.cursor()
+
+    sql="select "
+    flag=0
+    for i in soup.find_all("tr"):
+        if flag!=0:
+            jz=i.find("td","tor bold").string
+            jzdate=i.find_all(text=re.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}"))
+            sql="insert into "+jztable+" values(null,'"+code+"','"+jzdate[0]+"','"+jz+"');"
+            cursor.execute(sql)
+            db.commit()
+        flag+=1
+getJinzhi("000001","6")
+exit(0)
 code=0
 #检查输入的基金代码是否正确
 #参数：n ，可以输入的次数
@@ -150,6 +181,12 @@ def checkInputCode(n):
     global code
     n -= 1
     code = input("请输入你要查询的基金代码:")
+    db = pymysql.connect("172.168.1.161", "jack", "root1234", "found", charset="utf8")
+    cursor = db.cursor()
+    cursor.execute("select * from foundabout");
+    result = cursor.fetchall()
+    for row in result:
+        saveFoundCode.append(row[1])
     if (str(re.match('^[0-9]{6}$', code))=="None"):
         print("您输入的基金代码有误，请重新输入")
         jsq+=1
@@ -182,7 +219,7 @@ while not foundInfo.empty():
 
 # while not foundCodeUrlQueue.empty():
 #     print(foundCodeUrlQueue.get())
-# exit(0)
+exit(0)
 threads=[]
 threadList=["Thread-1","Thread-2","Thread-3","Thread-4"]
 for iname in threadList:
