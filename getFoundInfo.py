@@ -15,7 +15,9 @@ now.strftime('%Y-%m-%d %H:%M:%S')
 foundInfo=Queue(10000)            #保存基金的总信息
 foundCodeUrlQueue = Queue(500)  #保存含有基金代码的url地址列表
 saveFoundCode = []   #保存所有的基金代码
-
+host="localhost"
+user="root"
+passwd="root"
 jsq=0               #计数器
 #插入时间
 foundInfo.put("当前时间:"+now.strftime('%Y-%m-%d %H:%M:%S'))
@@ -131,7 +133,7 @@ def getAllCode():
     soup=getSoup(foundUrl,"gb2312")
     #allf=soup.find_all(text=re.compile("[0-9]{6,}"))
     allf=soup.find_all("ul",class_="num_right")
-    db = pymysql.connect("172.168.1.161","jack","root1234","found",charset="utf8" )
+    db = pymysql.connect(host,user,passwd,"found",charset="utf8" )
     cursor=db.cursor()
     for i in allf:
         x=i.find_all(text=re.compile("[0-9]{6,}"))
@@ -144,6 +146,13 @@ def getAllCode():
         db.commit()
         #获取基金名字
 
+#获取总页数
+def totalPage(code):
+    soup=getSoup(hisJinZhiUrl,'utf-8',code)
+    print(soup)
+    print(soup.find_all(text="下一页"))
+totalPage("233009")
+exit(0)
 #获取基金历史净值
 def getJinzhi(code,page):
     url="http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code="+code+"&page="+page+"&per=20&sdate=&edate=&rt=0.7782273583645574"
@@ -158,16 +167,18 @@ def getJinzhi(code,page):
     req.add_header('Referer', 'http://fund.eastmoney.com/f10/jjjz_080015.html')
     content = request.urlopen(req).read().decode('utf-8', 'ignore')
     soup = BeautifulSoup(content, "html.parser")
-    db = pymysql.connect("172.168.1.161", "jack", "root1234", "found", charset="utf8")
+    db = pymysql.connect(host, user,passwd, "found", charset="utf8")
     cursor = db.cursor()
-
-    sql="select "
+    #查出基金净值应该存储在的表
+    sql="select jztable from code_jinzhi where code='"+code+"';"
+    cursor.execute(sql)
+    result=cursor.fetchall()
     flag=0
     for i in soup.find_all("tr"):
         if flag!=0:
             jz=i.find("td","tor bold").string
             jzdate=i.find_all(text=re.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}"))
-            sql="insert into "+jztable+" values(null,'"+code+"','"+jzdate[0]+"','"+jz+"');"
+            sql="insert into "+result[0][0]+" values(null,'"+code+"','"+jzdate[0]+"','"+jz+"');"
             cursor.execute(sql)
             db.commit()
         flag+=1
@@ -181,7 +192,7 @@ def checkInputCode(n):
     global code
     n -= 1
     code = input("请输入你要查询的基金代码:")
-    db = pymysql.connect("172.168.1.161", "jack", "root1234", "found", charset="utf8")
+    db = pymysql.connect(host, user, passwd, "found", charset="utf8")
     cursor = db.cursor()
     cursor.execute("select * from foundabout");
     result = cursor.fetchall()
