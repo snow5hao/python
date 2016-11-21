@@ -7,31 +7,17 @@ CREATE TABLE foundabout (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8
 
 #基金代码和所在表对应表
+create table code_jinzhi(
+code varchar(6) not null,
+jztable varchar(20) not null
+)
+select code from foundabout limit 0,53;
+select code from foundabout limit 0,53;
 
+
+insert into code_jinzhi values(code,hisjinzhi_0)
 
 #存储过程创建数据表,共100张表0~99
-Delimiter //
-Create procedure create_table()
-BEGIN
-DECLARE @i int(10);
-DECLARE @sqlstr varchar(1000);
-SET @i = 0;
-WHILE @i < 100 DO
-SET @sqlstr=CONCAT(
-"create table hisval_",
-@i,
-"(
-id bigint(10) primary key auto_increment,
-code varchar(6) NOT NULL,
-jinzhi varchar(7) NOT NULL
-);");
-prepare stmt from @sqlstr;
-execute stmt;
-SET @i=@i+1;
-END;
-call create_table()
-//
-
 delimiter //
 CREATE procedure create_table()
 BEGIN
@@ -42,7 +28,6 @@ WHILE `@i` < 100 DO
 SET @sqlstr = CONCAT(
 "CREATE TABLE hisjinzhi_",
 `@i`,
-
 "(
 `id` int(11) NOT NULL AUTO_INCREMENT,
 `code` int(11) NOT NULL COMMENT '基金代码',
@@ -67,3 +52,43 @@ delimiter ;
 #创建批量上传净值表的sql语句
 SELECT CONCAT( 'drop table ', table_name, ';' ) AS mutiply_delete_sql FROM information_schema.tables
 WHERE table_name LIKE 'hisjinzhi_%';
+
+#这个表专门用来存储新添加的基金
+CREATE TABLE `hisjinzhi_100` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `code` int(11) NOT NULL COMMENT '基金代码',
+  `jzdate` varchar(10) NOT NULL COMMENT '日期',
+  `jinzhi` varchar(50) NOT NULL COMMENT '基金净值',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='基金历史净值表'
+
+#吧基金代码和净值表联系起来的py脚本
+db = pymysql.connect("localhost", "root", "root", "found", charset="utf8")
+cursor = db.cursor()
+i=0
+y=0
+while i<101:
+    sql2="select code from foundabout limit "+str(y)+",53;"
+    #print(sql2)
+    cursor.execute(sql2);
+    i+=1;
+    y=i*53
+    result = cursor.fetchall()
+    db.commit()
+    jzt="hisjinzhi_"+str(i-1)
+    for row in result:
+        sql="insert into code_jinzhi values('"+row[0]+"','"+jzt+"');"
+        cursor.execute(sql)
+
+ #5301后面的基金代码都放入到hisjinzhi_100表中
+db = pymysql.connect("localhost", "root", "root", "found", charset="utf8")
+cursor = db.cursor()
+sql2="select code from foundabout where id>5301;"
+cursor.execute(sql2);
+result = cursor.fetchall()
+db.commit()
+jzt="hisjinzhi_100"
+for row in result:
+    sql="insert into code_jinzhi values('"+row[0]+"','"+jzt+"');"
+    cursor.execute(sql)
+    db.commit()
