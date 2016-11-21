@@ -1,0 +1,69 @@
+#基金名字和代码对应表
+CREATE TABLE foundabout (
+  id int(5) NOT NULL AUTO_INCREMENT,
+  code varchar(6) NOT NULL,
+  name varchar(30) NOT NULL,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8
+
+#基金代码和所在表对应表
+
+
+#存储过程创建数据表,共100张表0~99
+Delimiter //
+Create procedure create_table()
+BEGIN
+DECLARE @i int(10);
+DECLARE @sqlstr varchar(1000);
+SET @i = 0;
+WHILE @i < 100 DO
+SET @sqlstr=CONCAT(
+"create table hisval_",
+@i,
+"(
+id bigint(10) primary key auto_increment,
+code varchar(6) NOT NULL,
+jinzhi varchar(7) NOT NULL
+);");
+prepare stmt from @sqlstr;
+execute stmt;
+SET @i=@i+1;
+END;
+call create_table()
+//
+
+delimiter //
+CREATE procedure create_table()
+BEGIN
+DECLARE `@i` int(11);
+DECLARE `@sqlstr` varchar(2560);
+SET `@i`=0;
+WHILE `@i` < 100 DO
+SET @sqlstr = CONCAT(
+"CREATE TABLE hisjinzhi_",
+`@i`,
+
+"(
+`id` int(11) NOT NULL AUTO_INCREMENT,
+`code` int(11) NOT NULL COMMENT '基金代码',
+`jzdate` varchar(10) NOT NULL COMMENT '日期',
+`jinzhi` varchar(50) NOT NULL COMMENT '基金净值',
+PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COMMENT='基金历史净值表' AUTO_INCREMENT=1 "
+);
+prepare stmt from @sqlstr;
+execute stmt;
+
+SET `@i` = `@i` + 1;
+END WHILE;
+END;
+call create_table();
+drop procedure create_table;
+
+//
+delimiter ;
+
+
+#创建批量上传净值表的sql语句
+SELECT CONCAT( 'drop table ', table_name, ';' ) AS mutiply_delete_sql FROM information_schema.tables
+WHERE table_name LIKE 'hisjinzhi_%';
