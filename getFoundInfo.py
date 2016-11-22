@@ -15,9 +15,9 @@ now.strftime('%Y-%m-%d %H:%M:%S')
 foundInfo=Queue(10000)            #保存基金的总信息
 foundCodeUrlQueue = Queue(500)  #保存含有基金代码的url地址列表
 saveFoundCode = []   #保存所有的基金代码
-host="localhost"
-user="root"
-passwd="root"
+host="172.168.1.161"
+user="jack"
+passwd="root1234"
 jsq=0               #计数器
 #插入时间
 foundInfo.put("当前时间:"+now.strftime('%Y-%m-%d %H:%M:%S'))
@@ -28,6 +28,9 @@ foundDetailUrl="http://fund.eastmoney.com/233009.html?spm=search"
 allFoundUrl="http://fund.eastmoney.com/daogou/#dt0;ft;rs;sd;ed;pr;cp;rt;tp;rk;se;nx;scz;stdesc;pi1;pn20;zfdiy;shlist"
 foundUrl="http://fund.eastmoney.com/allfund.html"
 hisJinZhiUrl="http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code=233009&page=6&per=20&sdate=&edate=&rt=0.7782273583645574"
+
+
+
 
 #返回url的soup
 # 参数：包含基金信息url,基金代码code（默认是查询摩尔因子）
@@ -133,8 +136,8 @@ def getAllCode():
     soup=getSoup(foundUrl,"gb2312")
     #allf=soup.find_all(text=re.compile("[0-9]{6,}"))
     allf=soup.find_all("ul",class_="num_right")
-    db = pymysql.connect(host,user,passwd,"found",charset="utf8" )
-    cursor=db.cursor()
+    db = pymysql.connect(host, user, passwd, "found", charset="utf8")
+    cursor = db.cursor()
     for i in allf:
         x=i.find_all(text=re.compile("[0-9]{6,}"))
         for allcode in x:
@@ -146,13 +149,22 @@ def getAllCode():
         db.commit()
         #获取基金名字
 
+#根据基金名字查询基金代码
+def getFoundName():
+    code=input("请输入你要查询的基金名字:")
+    db = pymysql.connect(host, user, passwd, "found", charset="utf8")
+    cursor = db.cursor()
+    sql="select name,code from foundabout where name like '%"+code+"%';"
+    cursor.execute(sql)
+    for row in cursor.fetchall():
+        print(row[1]+" : "+row[0])
+
 #获取总页数
 def totalPage(code):
     soup=getSoup(hisJinZhiUrl,'utf-8',code)
     print(soup)
     print(soup.find_all(text="下一页"))
-totalPage("233009")
-exit(0)
+
 #获取基金历史净值
 def getJinzhi(code,page):
     url="http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code="+code+"&page="+page+"&per=20&sdate=&edate=&rt=0.7782273583645574"
@@ -182,9 +194,7 @@ def getJinzhi(code,page):
             cursor.execute(sql)
             db.commit()
         flag+=1
-getJinzhi("000001","6")
-exit(0)
-code=0
+
 #检查输入的基金代码是否正确
 #参数：n ，可以输入的次数
 def checkInputCode(n):
@@ -222,11 +232,26 @@ class myThread(threading.Thread):
         print(self.threadName+"ending……")
 
 #主程序+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+print("-------------欢迎来到基金优选程序：---------------")
+flag=0
+while flag==0:
+    promot="=====================\n" \
+           "请输入您要选择的功能:\n" \
+           "1：查询基金代码\n" \
+           "2：查询基金基本信息\n" \
+           "3：退出\n" \
+           "=====================\n"
+    choice=input(promot)
+    if choice=="1":
+        getFoundName()
+    if choice=="2":
+        code = checkInputCode(3)
+        getFoundInfo(code)
+        while not foundInfo.empty():
+            print(foundInfo.get())
+    if choice=="3":
+        flag=1
 
-code=checkInputCode(3)
-getFoundInfo(code)
-while not foundInfo.empty():
-    print(foundInfo.get())
 
 # while not foundCodeUrlQueue.empty():
 #     print(foundCodeUrlQueue.get())
