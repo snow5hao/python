@@ -15,6 +15,8 @@ now.strftime('%Y-%m-%d %H:%M:%S')
 foundInfo=Queue(10000)            #保存基金的总信息
 foundCodeUrlQueue = Queue(500)  #保存含有基金代码的url地址列表
 saveFoundCode = []   #保存所有的基金代码
+threads = []
+allFoundCode = Queue(10000)
 host="172.168.1.161"
 user="jack"
 passwd="root1234"
@@ -131,10 +133,9 @@ def getFoundCode(threadName):
             saveFoundCode.put(i)
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
-#获取所有的基金代码和基金名字，保存在数据库中和saveFoundCode列队中
+#获取所有的基金代码和基金名字，保存在数据库中,也可能通过再次执行来更新
 def getAllCode():
     soup=getSoup(foundUrl,"gb2312")
-    #allf=soup.find_all(text=re.compile("[0-9]{6,}"))
     allf=soup.find_all("ul",class_="num_right")
     db = pymysql.connect(host, user, passwd, "found", charset="utf8")
     cursor = db.cursor()
@@ -143,11 +144,12 @@ def getAllCode():
         for allcode in x:
             codeNum=re.search("[0-9]{6,}",allcode)
             codeName=re.sub(r'\（[0-9]{6,}\）',"",allcode)
-            sql=str("insert into foundabout values(null,'"+codeNum.group(0)+"','"+codeName+"');")
+            sql = "select code from foundabout where code='"+codeNum.group(0)+"';"
             cursor.execute(sql)
-            saveFoundCode.append(codeNum.group(0))
-        db.commit()
-        #获取基金名字
+            if len(cursor.fetchall())==0:
+                sql=str("insert into foundabout values(null,'"+codeNum.group(0)+"','"+codeName+"');")
+                cursor.execute(sql)
+                db.commit()
 
 #根据基金名字查询基金代码
 def getFoundName():
@@ -159,15 +161,18 @@ def getFoundName():
     for row in cursor.fetchall():
         print(row[1]+" : "+row[0])
 
-#获取总页数
+#返回 int 总页数，
+#参数code ,基金代码
 def totalPage(code):
     soup=getSoup(hisJinZhiUrl,'utf-8',code)
-    print(soup)
-    print(soup.find_all(text="下一页"))
+    result=soup.find_all(text=re.compile("pages"))
+    x=re.search('pages:.*\,',result[0])
+    return int(re.sub(r'\D',"",x.group(0)))
 
 #获取基金历史净值
+#参数 code：基金代码，page，要获取的页
 def getJinzhi(code,page):
-    url="http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code="+code+"&page="+page+"&per=20&sdate=&edate=&rt=0.7782273583645574"
+    url="http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code="+code+"&page="+str(page)+"&per=20&sdate=&edate=&rt=0.7782273583645574"
     cj = http.cookiejar.LWPCookieJar()
     cookie_support = request.HTTPCookieProcessor(cj)
     opener = request.build_opener(cookie_support, request.HTTPHandler)
@@ -188,12 +193,39 @@ def getJinzhi(code,page):
     flag=0
     for i in soup.find_all("tr"):
         if flag!=0:
+            #跳过查找到的第一个tr
             jz=i.find("td","tor bold").string
             jzdate=i.find_all(text=re.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}"))
-            sql="insert into "+result[0][0]+" values(null,'"+code+"','"+jzdate[0]+"','"+jz+"');"
+            if len(result) == 0:
+                sql = "insert into hisjinzhi_100 values(null,'" + code + "','" + jzdate[0] + "','" + jz + "');"
+            else:
+                sql = "insert into " + result[0][0] + " values(null,'" + code + "','" + jzdate[0] + "','" + jz + "');"
             cursor.execute(sql)
             db.commit()
-        flag+=1
+            #检查数据库中时候存在某个日期的净值数据,如果存在就终止函数执行，返回1，
+    #         sql="select jinzhi from "+result[0][0]+" where jzdate='"+jzdate[0]+"';"
+    #         cursor.execute(sql)
+    #         if len(cursor.fetchall())==0:
+    #             sql="insert into "+result[0][0]+" values(null,'"+code+"','"+jzdate[0]+"','"+jz+"');"
+    #             cursor.execute(sql)
+    #             db.commit()
+    #         else:
+    #             return 1
+    # return 2
+        flag += 1
+
+
+#获取数据库中所有基金的历史所有净值
+def getAllJinZhi():
+    while not allFoundCode.empty():
+        code=allFoundCode.get()
+        totalpage = totalPage(code)
+        if totalpage==0:
+            continue
+        page = 1
+        while page <= totalpage:
+            getJinzhi(code, page)
+            page += 1
 
 #检查输入的基金代码是否正确
 #参数：n ，可以输入的次数
@@ -217,7 +249,7 @@ def checkInputCode(n):
         else:
             checkInputCode(n)
     elif code not in saveFoundCode:
-        print("你找的是火星上的基金吗？反正我是没找到这只鸡")
+        print("你找基金在数据库中不存在，可以尝试更新数据库")
         exit(1)
     return code
 
@@ -228,10 +260,19 @@ class myThread(threading.Thread):
         self.threadName=threadName
     def run(self):
         print(self.threadName+" started……")
-        getFoundCode(self.threadName)
+        getAllJinZhi()
         print(self.threadName+"ending……")
 
-#主程序+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#开启多线程
+def openMutiThread():
+    threadList = ["Thread-1", "Thread-2", "Thread-3", "Thread-4","Thread-5", "Thread-6", "Thread-7", "Thread-8","Thread-9", "Thread-10"]
+    for iname in threadList:
+        thread = myThread(iname)
+        thread.start()
+        threads.append(thread)
+
+
+#++++++++++++++++++++主程序开始++++++++++++++++++++++++
 print("-------------欢迎来到基金优选程序：---------------")
 flag=0
 while flag==0:
@@ -239,34 +280,46 @@ while flag==0:
            "请输入您要选择的功能:\n" \
            "1：查询基金代码\n" \
            "2：查询基金基本信息\n" \
-           "3：退出\n" \
+           "3：更新数据库的基金代码\n" \
+           "4: 更新基金历史净值\n" \
+           "5：退出\n" \
            "=====================\n"
     choice=input(promot)
     if choice=="1":
         getFoundName()
     if choice=="2":
         code = checkInputCode(3)
-        getFoundInfo(code)
+        try:
+            getFoundInfo(code)
+        except:
+            print("找不到相关信息，可能该基金还未开放认购")
         while not foundInfo.empty():
             print(foundInfo.get())
     if choice=="3":
+        try:
+            getAllCode()
+        except:
+            print("更新发生错误")
+    if choice=="4":
+        try:
+            db = pymysql.connect(host, user, passwd, "found", charset="utf8")
+            cursor = db.cursor()
+            sql = "select code from foundabout;"
+            cursor.execute(sql)
+            for row in cursor.fetchall():
+                allFoundCode.put(row[0])
+            openMutiThread()
+            for i in threads:
+                i.join()
+            print(time.ctime())
+            print("Exiting main threading")
+        except:
+            print("更新历史净值发生错误咯，你个大傻逼")
+    if choice=="5":
         flag=1
 
 
-# while not foundCodeUrlQueue.empty():
-#     print(foundCodeUrlQueue.get())
-exit(0)
-threads=[]
-threadList=["Thread-1","Thread-2","Thread-3","Thread-4"]
-for iname in threadList:
-    thread=myThread(iname)
-    #thread.start()
-    threads.append(thread)
 
-for i in threads:
-    i.join()
-print(time.ctime())
-print("Exiting main threading")
 
 
 
