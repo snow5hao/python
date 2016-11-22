@@ -17,9 +17,9 @@ foundCodeUrlQueue = Queue(500)  #保存含有基金代码的url地址列表
 saveFoundCode = []   #保存所有的基金代码
 threads = []
 allFoundCode = Queue(10000)
-host="172.168.1.161"
-user="jack"
-passwd="root1234"
+host="localhost"
+user="root"
+passwd="root"
 jsq=0               #计数器
 #插入时间
 foundInfo.put("当前时间:"+now.strftime('%Y-%m-%d %H:%M:%S'))
@@ -199,7 +199,11 @@ def getJinzhi(code,page):
             if len(result) == 0:
                 sql = "insert into hisjinzhi_100 values(null,'" + code + "','" + jzdate[0] + "','" + jz + "');"
             else:
-                sql = "insert into " + result[0][0] + " values(null,'" + code + "','" + jzdate[0] + "','" + jz + "');"
+                try:
+                    sql = "insert into " + result[0][0] + " values(null,'" + code + "','" + jzdate[0] + "','" + jz + "');"
+                except:
+                    print(type(result[0][0]))
+                    print(result[0][0])
             cursor.execute(sql)
             db.commit()
             #检查数据库中时候存在某个日期的净值数据,如果存在就终止函数执行，返回1，
