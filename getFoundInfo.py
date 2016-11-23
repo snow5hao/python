@@ -5,13 +5,9 @@ import re
 import threading
 import time
 import pymysql
-import hashlib
-from datetime import datetime
 from queue import Queue
 from bs4 import BeautifulSoup
 
-now=datetime.now()
-now.strftime('%Y-%m-%d %H:%M:%S')
 foundInfo=Queue(10000)            #保存基金的总信息
 foundCodeUrlQueue = Queue(500)  #保存含有基金代码的url地址列表
 saveFoundCode = []   #保存所有的基金代码
@@ -25,7 +21,7 @@ user="jack"
 passwd="root1234"
 jsq=0               #计数器
 #插入时间
-foundInfo.put("当前时间:"+now.strftime('%Y-%m-%d %H:%M:%S'))
+foundInfo.put("当前时间:"+time.strftime('%Y-%m-%d %H:%M:%S'))
 
 #含有基金信息的url地址
 foundAboutUrl="http://fund.eastmoney.com/f10/jbgk_233009.html"
@@ -218,39 +214,29 @@ def getJinzhi(code,page):
     cursor.execute(sql)
     result=cursor.fetchall()
     flag=0
+    if len(result)==0:
+        print("tmd，还真的有不存在的，日了狗了")
+        exit
     for i in soup.find_all("tr"):
         # 跳过查找到的第一个tr
         if flag!=0:
             jz=i.find("td","tor bold").string
             jzdate=i.find_all(text=re.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}"))
-            if len(result) == 0:  #查询基金对应的表是否为0-99，如果不是，保存到hisjinzhi_100这张表中
-                sql = "select jinzhi from hisjinzhi_100 where code='"+code+"' and jzdate='" + jzdate[0] + "';"
+            try:
+                sql = "select jinzhi from " + result[0][0] + " where code='" + code + "' and jzdate='" + jzdate[0] + "';"
                 cursor.execute(sql)
-                if len(cursor.fetchall()) == 0: #查询基金历史净值表是否存在该日期的数据，如果已经存在了，则不再继续插入
-                    try:
-                        sql = "insert into hisjinzhi_100 values(null,'" + code + "','" + jzdate[0] + "','" + jz + "');"
-                        cursor.execute(sql)
-                        db.commit()
-                    except:
-                        print(sql)
+                if len(cursor.fetchall()) == 0:
+                    sql = "insert into " + result[0][0] + " values(null,'" + code + "','" + jzdate[0] + "','" + jz + "');"
+                    cursor.execute(sql)
+                    db.commit()
                 else:
                     return 1
-            else:
-                try:
-                    sql = "select jinzhi from " + result[0][0] + " where code='"+code+"' and jzdate='" + jzdate[0] + "';"
-                    cursor.execute(sql)
-                    if len(cursor.fetchall()) == 0:
-                        sql = "insert into " + result[0][0] + " values(null,'" + code + "','" + jzdate[0] + "','" + jz + "');"
-                        cursor.execute(sql)
-                        db.commit()
-                    else:
-                        return 1
-                except:
-                    print(sql)
+            except:
+                print(sql)
         flag += 1
 
 
-#查询基金净值信息,如果用户没有输入日期，则默认查询上一个交易日的信息
+#查询基金净值信息,如果用户没有输入日期，则默认查询当天的信息
 def findJinzhi():
     code = checkInputCode()
     jzdate1 = input("请输入要查询的开始时间(格式:xxxx-xx-xx):") or time.strftime("%Y-%m-%d",time.localtime())
@@ -271,10 +257,12 @@ def findJinzhi():
         print(row[0]+" : "+row[1])
 
 #获取数据库中所有基金的历史所有净值
+#foundabout表里面的基金数量比hisjinzhi_*表里面的基金要多，hisjinzhi_*表里面只保存了已经有净值数据的基金
 def getAllJinZhi():
     while not allFoundCode.empty():
         code=allFoundCode.get()
         totalpage = totalPage(code)
+        #跳过没有净值数据的基金
         if totalpage==0:
             continue
         page = 1
