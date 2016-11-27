@@ -272,7 +272,25 @@ def getAllJinZhi():
                 break
             page += 1
 
-
+#获取一周跌幅超过5个点的基金
+def fiveDay(code):
+    db = pymysql.connect(host, user, passwd, "found", charset="utf8")
+    cursor = db.cursor()
+    sql = "select code from openFound;"
+    cursor.execute(sql)
+    for i in cursor.fetchall():
+        url="http://fund.eastmoney.com/210009.html"
+        soup=getSoup(url,"utf-8",i)
+        try:
+            jdate = soup.find_all("div",class_="typeName")
+            j=0
+            for i in jdate[0].next_elements:
+                if j==3:
+                    print(re.sub(r"%","",i.string))
+                    break
+                j+=1
+        except:
+            continue
 
 #创建多线程
 class myThread(threading.Thread):
