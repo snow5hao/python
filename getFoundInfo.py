@@ -13,6 +13,7 @@ foundCodeUrlQueue = Queue(500)  #保存含有基金代码的url地址列表
 saveFoundCode = []   #保存所有的基金代码
 threads = []
 allFoundCode = Queue(10000)
+fiveCode=Queue(1000)  #保存一周内跌幅超过5个点的基金
 # host="localhost"
 # user="root"
 # passwd="root"
@@ -272,6 +273,7 @@ def getAllJinZhi():
                 break
             page += 1
 
+
 #获取一周跌幅超过5个点的基金
 def fiveDay(code):
     db = pymysql.connect(host, user, passwd, "found", charset="utf8")
@@ -292,6 +294,72 @@ def fiveDay(code):
         except:
             continue
 
+#获取一周跌幅超过3个点的基金
+def fiveDay():
+    db = pymysql.connect(host, user, passwd, "found", charset="utf8")
+    cursor = db.cursor()
+    sql = "select code from goodFounds;"
+    cursor.execute(sql)
+    for code in cursor.fetchall():
+        url="http://fund.eastmoney.com/210009.html"
+        soup=getSoup(url,"utf-8",code[0])
+        jdate = soup.find_all("div", class_="typeName")
+        j = 0
+        for i in jdate[0].next_elements:
+            if j == 3:
+                try:
+                    result = re.sub(r"%", "", i.string)
+                    if float(result) < 0 and abs(float(result)) >= 3:
+                        fiveCode.put(code[0])
+                except:
+                    continue
+            j += 1
+# fiveDay()
+# while not fiveCode.empty():
+#     print(fiveCode.get())
+# exit(0)
+
+#监控基金，只要涨幅超过4个点就提醒
+def watchFound():
+    name=Queue(100)
+    db = pymysql.connect(host, user, passwd, "found", charset="utf8")
+    cursor = db.cursor()
+    sql = "select code,buyJinzhi,buyfee from myFounds;"
+    cursor.execute(sql)
+    for info in cursor.fetchall():
+        soup = getSoup(foundDetailUrl, 'utf-8', info[0])
+        jname = soup.find_all("div", class_="fundDetail-tit")
+        for i in jname:
+            name.put(i.text)
+        jinzhi = soup.find_all("dd", class_="dataNums")
+        foundInfo.put("单位净值:" + jinzhi[1].span.string)
+        zf=(float(jinzhi[1].span.string)-float(info[1]))/float(info[1])*100
+        if zf>4:
+            print("恭喜，已经涨了4个点了，赶紧卖吧")
+        zhangfu = soup.find_all(id="gz_gszzl")
+        print("基金:",name.get(),"涨了",round(zf,2),"%, 今天估算涨幅为:",zhangfu[0].string)
+# watchFound()
+# exit()
+#添加购买的基金
+def myBuyFound():
+    code=input("请出入你购买的基金代码:")
+    money = input("请输入你购买的金额:")
+    buydate=input("请输入你购买的日期(格式:xxxx-xx-xx):") or time.strftime("%Y-%m-%d",time.localtime())
+    buyfee=input("请输入手续费:") or ""
+    otherInfo=input("如果有其它要保存的信息，请输入:") or ""
+    db = pymysql.connect(host, user, passwd, "found", charset="utf8")
+    cursor = db.cursor()
+    sql="select jztable from code_jinzhi where code='"+code+"';";
+    cursor.execute(sql)
+    result=cursor.fetchall()
+    sql="select jinzhi from "+result[0][0]+" where code='"+code+"' and jzdate='"+buydate+"';"
+    cursor.execute(sql)
+    result=cursor.fetchall()
+    sql="insert into myFounds values(null,'"+code+"','"+money+"','"+buydate+"','"+result[0][0]+"','"+buyfee+"','"+otherInfo+"');"
+    cursor.execute(sql)
+    db.commit()
+
+
 #创建多线程
 class myThread(threading.Thread):
     def __init__(self,threadName):
@@ -305,7 +373,6 @@ class myThread(threading.Thread):
 #开启多线程
 def openMutiThread():
     threadList = ["Thread-1", "Thread-2", "Thread-3", "Thread-4","Thread-5", "Thread-6", "Thread-7", "Thread-8","Thread-9", "Thread-10"]
-    #threadList = ["Thread-1", "Thread-2"]
     for iname in threadList:
         thread = myThread(iname)
         thread.start()
@@ -314,16 +381,20 @@ def openMutiThread():
 
 #++++++++++++++++++++主程序开始++++++++++++++++++++++++
 print("-------------欢迎来到基金优选程序：---------------")
+print("提醒:每天最好更新一下基金的历史净值")
 flag=0
 while flag==0:
     promot="=====================\n" \
            "请输入您要选择的功能:\n" \
            "1：查询基金代码\n" \
            "2：查询基金基本信息\n" \
-           "3：更新数据库的基金代码\n" \
-           "4: 更新基金历史净值\n" \
-           "5: 查询基金的历史净值\n" \
-           "6：退出\n" \
+           "3: 查询基金的历史净值\n" \
+           "4：更新数据库的基金代码\n" \
+           "5: 更新基金历史净值\n" \
+           "6: 添加购买的基金\n" \
+           "7：获取一周内跌幅超过5%的基金\n" \
+           "8: 查看自己基金的涨跌幅信息\n" \
+           "9：退出\n" \
            "=====================\n"
     choice=input(promot)
     if choice=="1":
@@ -359,7 +430,15 @@ while flag==0:
         except:
             print("更新历史净值发生错误咯，你个大傻逼")
     if choice=="6":
-        flag+=1
+        myBuyFound()
+    if choice=="7":
+        fiveDay()
+        while not fiveCode.empty():
+             print(fiveCode.get())
+    if choice=="8":
+        watchFound()
+    if choice == "9":
+       flag+=1
 
 
 
