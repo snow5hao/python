@@ -106,4 +106,3 @@ def calIncrease():
         #     for row in cursor.fetchall():
 
 calIncrease()
-
