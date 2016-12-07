@@ -11,8 +11,7 @@ create table code_jinzhi(
 code varchar(6) not null,
 jztable varchar(20) not null
 )
-select code from foundabout limit 0,53;
-select code from foundabout limit 0,53;
+
 
 
 insert into code_jinzhi values(code,hisjinzhi_0)
@@ -49,7 +48,7 @@ drop procedure create_table;
 delimiter ;
 
 
-#创建批量上传净值表的sql语句
+#创建批量删除净值表的sql语句
 SELECT CONCAT( 'drop table ', table_name, ';' ) AS mutiply_delete_sql FROM information_schema.tables
 WHERE table_name LIKE 'hisjinzhi_%';
 
