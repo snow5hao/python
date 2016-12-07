@@ -4,25 +4,26 @@ import http.cookiejar
 import re
 import threading
 import time
+import sys
 import pymysql
-import hashlib
-from datetime import datetime
 from queue import Queue
 from bs4 import BeautifulSoup
 
-now=datetime.now()
-now.strftime('%Y-%m-%d %H:%M:%S')
 foundInfo=Queue(10000)            #保存基金的总信息
 foundCodeUrlQueue = Queue(500)  #保存含有基金代码的url地址列表
 saveFoundCode = []   #保存所有的基金代码
 threads = []
 allFoundCode = Queue(10000)
-host="localhost"
-user="root"
-passwd="root"
+fiveCode=Queue(1000)  #保存一周内跌幅超过5个点的基金
+# host="localhost"
+# user="root"
+# passwd="root"
+host="172.168.1.175"
+user="jack"
+passwd="root1234"
 jsq=0               #计数器
 #插入时间
-foundInfo.put("当前时间:"+now.strftime('%Y-%m-%d %H:%M:%S'))
+foundInfo.put("当前时间:"+time.strftime('%Y-%m-%d %H:%M:%S'))
 
 #含有基金信息的url地址
 foundAboutUrl="http://fund.eastmoney.com/f10/jbgk_233009.html"
@@ -32,7 +33,31 @@ foundUrl="http://fund.eastmoney.com/allfund.html"
 hisJinZhiUrl="http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code=233009&page=6&per=20&sdate=&edate=&rt=0.7782273583645574"
 
 
-
+#检查输入的基金代码是否正确
+#参数：n ，可以输入的次数
+def checkInputCode(n=3):
+    global jsq
+    global code
+    n -= 1
+    code = input("请输入你要查询的基金代码:")
+    db = pymysql.connect(host, user, passwd, "found", charset="utf8")
+    cursor = db.cursor()
+    cursor.execute("select * from foundabout");
+    result = cursor.fetchall()
+    for row in result:
+        saveFoundCode.append(row[1])
+    if (str(re.match('^[0-9]{6}$', code))=="None"):
+        print("您输入的基金代码有误，请重新输入")
+        jsq+=1
+        if n < 1 :
+            print("你会不会啊，输了"+str(jsq)+"次还输不对")
+            exit(1)
+        else:
+            checkInputCode(n)
+    elif code not in saveFoundCode:
+        print("你找基金在数据库中不存在，可以尝试更新数据库")
+        exit(1)
+    return code
 
 #返回url的soup
 # 参数：包含基金信息url,基金代码code（默认是查询摩尔因子）
@@ -150,7 +175,16 @@ def getAllCode():
                 sql=str("insert into foundabout values(null,'"+codeNum.group(0)+"','"+codeName+"');")
                 cursor.execute(sql)
                 db.commit()
-
+    #把新得到的基金代码对应到hisjinzhi_100这个表中
+    sql2 = "select code from foundabout where code not in (select code from code_jinzhi);"
+    cursor.execute(sql2);
+    result = cursor.fetchall()
+    db.commit()
+    jzt = "hisjinzhi_100"
+    for row in result:
+        sql = "insert into code_jinzhi values('" + row[0] + "','" + jzt + "');"
+        cursor.execute(sql)
+        db.commit()
 #根据基金名字查询基金代码
 def getFoundName():
     code=input("请输入你要查询的基金名字:")
@@ -161,7 +195,7 @@ def getFoundName():
     for row in cursor.fetchall():
         print(row[1]+" : "+row[0])
 
-#返回 int 总页数，
+#返回 int 总页数，这里是查询基金净值页面的总页数
 #参数code ,基金代码
 def totalPage(code):
     soup=getSoup(hisJinZhiUrl,'utf-8',code)
@@ -169,7 +203,7 @@ def totalPage(code):
     x=re.search('pages:.*\,',result[0])
     return int(re.sub(r'\D',"",x.group(0)))
 
-#获取基金历史净值
+#获取数据库中所有基金历史净值
 #参数 code：基金代码，page，要获取的页
 def getJinzhi(code,page):
     url="http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code="+code+"&page="+str(page)+"&per=20&sdate=&edate=&rt=0.7782273583645574"
@@ -191,71 +225,152 @@ def getJinzhi(code,page):
     cursor.execute(sql)
     result=cursor.fetchall()
     flag=0
+    if len(result)==0:
+        print("tmd，还真的有不存在的，日了狗了")
+        exit
     for i in soup.find_all("tr"):
+        # 跳过查找到的第一个tr
         if flag!=0:
-            #跳过查找到的第一个tr
             jz=i.find("td","tor bold").string
             jzdate=i.find_all(text=re.compile("[0-9]{4}-[0-9]{2}-[0-9]{2}"))
-            if len(result) == 0:
-                sql = "insert into hisjinzhi_100 values(null,'" + code + "','" + jzdate[0] + "','" + jz + "');"
-            else:
-                try:
+            try:
+                sql = "select jinzhi from " + result[0][0] + " where code='" + code + "' and jzdate='" + jzdate[0] + "';"
+                cursor.execute(sql)
+                if len(cursor.fetchall()) == 0:
                     sql = "insert into " + result[0][0] + " values(null,'" + code + "','" + jzdate[0] + "','" + jz + "');"
-                except:
-                    print(type(result[0][0]))
-                    print(result[0][0])
-            cursor.execute(sql)
-            db.commit()
-            #检查数据库中时候存在某个日期的净值数据,如果存在就终止函数执行，返回1，
-    #         sql="select jinzhi from "+result[0][0]+" where jzdate='"+jzdate[0]+"';"
-    #         cursor.execute(sql)
-    #         if len(cursor.fetchall())==0:
-    #             sql="insert into "+result[0][0]+" values(null,'"+code+"','"+jzdate[0]+"','"+jz+"');"
-    #             cursor.execute(sql)
-    #             db.commit()
-    #         else:
-    #             return 1
-    # return 2
+                    cursor.execute(sql)
+                    db.commit()
+                else:
+                    return 1
+            except:
+                print(sql)
         flag += 1
 
 
+#查询基金净值信息,如果用户没有输入日期，则默认查询当天的信息
+def findJinzhi():
+    code = checkInputCode()
+    jzdate1 = input("请输入要查询的开始时间(格式:xxxx-xx-xx):") or time.strftime("%Y-%m-%d",time.localtime())
+    jzdate2 = input("请输入要查询的结束时间(格式:xxxx-xx-xx):") or time.strftime("%Y-%m-%d",time.localtime())
+
+    db = pymysql.connect(host, user, passwd, "found", charset="utf8")
+    cursor = db.cursor()
+    sql="select jztable from code_jinzhi where code='"+code+"';"
+    cursor.execute(sql)
+    result=cursor.fetchall()
+    if len(result) == 0:
+        sql="select jzdate,jinzhi from hisjinzhi_100 where code='"+code+"' and jzdate between '"+jzdate1+"' and '"+jzdate2+"';"
+    else:
+        sql="select jzdate,jinzhi from "+result[0][0]+" where code='"+code+"' and jzdate between '"+jzdate1+"' and '"+jzdate2+"';"
+    cursor.execute(sql)
+    result=cursor.fetchall()
+    for row in result:
+        print(row[0]+" : "+row[1])
+
 #获取数据库中所有基金的历史所有净值
+#foundabout表里面的基金数量比hisjinzhi_*表里面的基金要多，hisjinzhi_*表里面只保存了已经有净值数据的基金
 def getAllJinZhi():
     while not allFoundCode.empty():
         code=allFoundCode.get()
         totalpage = totalPage(code)
+        #跳过没有净值数据的基金
         if totalpage==0:
             continue
         page = 1
         while page <= totalpage:
-            getJinzhi(code, page)
+            result=getJinzhi(code, page)
+            if result==1:
+                break
             page += 1
 
-#检查输入的基金代码是否正确
-#参数：n ，可以输入的次数
-def checkInputCode(n):
-    global jsq
-    global code
-    n -= 1
-    code = input("请输入你要查询的基金代码:")
+
+#获取一周跌幅超过5个点的基金
+def fiveDay(code):
     db = pymysql.connect(host, user, passwd, "found", charset="utf8")
     cursor = db.cursor()
-    cursor.execute("select * from foundabout");
-    result = cursor.fetchall()
-    for row in result:
-        saveFoundCode.append(row[1])
-    if (str(re.match('^[0-9]{6}$', code))=="None"):
-        print("您输入的基金代码有误，请重新输入")
-        jsq+=1
-        if n < 1 :
-            print("你会不会啊，输了"+str(jsq)+"次还输不对")
-            exit(1)
-        else:
-            checkInputCode(n)
-    elif code not in saveFoundCode:
-        print("你找基金在数据库中不存在，可以尝试更新数据库")
-        exit(1)
-    return code
+    sql = "select code from openFound;"
+    cursor.execute(sql)
+    for i in cursor.fetchall():
+        url="http://fund.eastmoney.com/210009.html"
+        soup=getSoup(url,"utf-8",i)
+        try:
+            jdate = soup.find_all("div",class_="typeName")
+            j=0
+            for i in jdate[0].next_elements:
+                if j==3:
+                    print(re.sub(r"%","",i.string))
+                    break
+                j+=1
+        except:
+            continue
+
+#获取一周跌幅超过3个点的基金
+def fiveDay():
+    db = pymysql.connect(host, user, passwd, "found", charset="utf8")
+    cursor = db.cursor()
+    sql = "select code from goodFounds;"
+    cursor.execute(sql)
+    for code in cursor.fetchall():
+        url="http://fund.eastmoney.com/210009.html"
+        soup=getSoup(url,"utf-8",code[0])
+        jdate = soup.find_all("div", class_="typeName")
+        j = 0
+        for i in jdate[0].next_elements:
+            if j == 3:
+                try:
+                    result = re.sub(r"%", "", i.string)
+                    if float(result) < 0 and abs(float(result)) >= 3:
+                        fiveCode.put(code[0])
+                except:
+                    continue
+            j += 1
+# fiveDay()
+# while not fiveCode.empty():
+#     print(fiveCode.get())
+# exit(0)
+
+#监控基金，只要涨幅超过4个点就提醒
+def watchFound():
+    name=Queue(100)
+    db = pymysql.connect(host, user, passwd, "found", charset="utf8")
+    cursor = db.cursor()
+    sql = "select code,buyJinzhi,buyfee from myFounds;"
+    cursor.execute(sql)
+    for info in cursor.fetchall():
+        soup = getSoup(foundDetailUrl, 'utf-8', info[0])
+        jname = soup.find_all("div", class_="fundDetail-tit")
+        for i in jname:
+            name.put(i.text)
+        jinzhi = soup.find_all("dd", class_="dataNums")
+        foundInfo.put("单位净值:" + jinzhi[1].span.string)
+        zf=(float(jinzhi[1].span.string)-float(info[1]))/float(info[1])*100
+        if zf>4:
+            print("恭喜，已经涨了4个点了，赶紧卖吧")
+        zhangfu = soup.find_all(id="gz_gszzl")
+        print("基金:",name.get(),"涨了",round(zf,2),"%, 今天估算涨幅为:",zhangfu[0].string)
+# watchFound()
+# exit()
+#添加购买的基金
+def myBuyFound():
+    code=input("请出入你购买的基金代码:")
+    money = input("请输入你购买的金额:")
+    buydate=input("请输入你购买的日期(格式:xxxx-xx-xx):") or time.strftime("%Y-%m-%d",time.localtime())
+    buyfee=input("请输入手续费:") or ""
+    otherInfo=input("如果有其它要保存的信息，请输入:") or ""
+    db = pymysql.connect(host, user, passwd, "found", charset="utf8")
+    cursor = db.cursor()
+    sql="select jztable from code_jinzhi where code='"+code+"';";
+    cursor.execute(sql)
+    result=cursor.fetchall()
+    sql="select jinzhi from "+result[0][0]+" where code='"+code+"' and jzdate='"+buydate+"';"
+    cursor.execute(sql)
+    result=cursor.fetchall()
+    sql="insert into myFounds values(null,'"+code+"','"+money+"','"+buydate+"','"+result[0][0]+"','"+buyfee+"','"+otherInfo+"');"
+    cursor.execute(sql)
+    db.commit()
+
+#监控黄金
+#def
 
 #创建多线程
 class myThread(threading.Thread):
@@ -278,15 +393,20 @@ def openMutiThread():
 
 #++++++++++++++++++++主程序开始++++++++++++++++++++++++
 print("-------------欢迎来到基金优选程序：---------------")
+print("提醒:每天最好更新一下基金的历史净值")
 flag=0
 while flag==0:
     promot="=====================\n" \
            "请输入您要选择的功能:\n" \
            "1：查询基金代码\n" \
            "2：查询基金基本信息\n" \
-           "3：更新数据库的基金代码\n" \
-           "4: 更新基金历史净值\n" \
-           "5：退出\n" \
+           "3: 查询基金的历史净值\n" \
+           "4：更新数据库的基金代码\n" \
+           "5: 更新基金历史净值\n" \
+           "6: 添加购买的基金\n" \
+           "7：获取一周内跌幅超过5%的基金\n" \
+           "8: 查看自己基金的涨跌幅信息\n" \
+           "9：退出\n" \
            "=====================\n"
     choice=input(promot)
     if choice=="1":
@@ -300,11 +420,14 @@ while flag==0:
         while not foundInfo.empty():
             print(foundInfo.get())
     if choice=="3":
+        findJinzhi()
+    if choice=="4":
         try:
             getAllCode()
         except:
+            print(sys.exc_info()[0])
             print("更新发生错误")
-    if choice=="4":
+    if choice=="5":
         try:
             db = pymysql.connect(host, user, passwd, "found", charset="utf8")
             cursor = db.cursor()
@@ -319,10 +442,16 @@ while flag==0:
             print("Exiting main threading")
         except:
             print("更新历史净值发生错误咯，你个大傻逼")
-    if choice=="5":
-        flag=1
-
-
+    if choice=="6":
+        myBuyFound()
+    if choice=="7":
+        fiveDay()
+        while not fiveCode.empty():
+             print(fiveCode.get())
+    if choice=="8":
+        watchFound()
+    if choice == "9":
+       flag+=1
 
 
 
