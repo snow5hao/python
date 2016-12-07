@@ -91,3 +91,38 @@ for row in result:
     sql="insert into code_jinzhi values('"+row[0]+"','"+jzt+"');"
     cursor.execute(sql)
     db.commit()
+
+
+#基金分类表
+1级：开放型基金
+create table openFound(
+id int(4) primary key auto_increment,
+code varchar(6) not null,
+kind varchar(4) not null  comment "1-表示gp，2表示hh，3表示zq，4表示指数型zs，5表示QDII,6表示ETF,7表示LOF",
+otherinfo varchar(30)
+)
+
+create table ceshi(
+id int(4) primary key auto_increment,
+code varchar(6) not null
+)
+
+#自己买的基金
+create table myFounds(
+id int(3) primary key auto_increment,
+code varchar(6) not null,
+money varchar(5) not null,
+buyDate varchar(10) not null,
+buyJinzhi varchar(10) not null,
+buyfee varchar(6) comment "申购手续费",
+otherinfo varchar(50)
+)
+
+#优质基金
+create table goodFounds(
+id int(4) primary key auto_increment,
+code varchar(6) not null,
+star int(1) not null,
+otherinfo varchar(50)
+)
+
